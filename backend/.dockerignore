@@ -1,0 +1,9 @@
+node_modules/
+uploads/
+.env
+.env.*
+chroma_db/
+.git/
+.DS_Store
+*.log
+npm-debug.log*

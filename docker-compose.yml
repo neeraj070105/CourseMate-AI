@@ -1,0 +1,89 @@
+services:
+  rag-service:
+    build:
+      context: ./rag
+      dockerfile: Dockerfile
+    container_name: coursemate-rag
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    env_file:
+      - path: .env
+        required: false
+      - path: ./rag/.env
+        required: false
+      - path: ./backend/.env
+        required: false
+    environment:
+      - RAG_HOST=0.0.0.0
+      - RAG_SERVICE_PORT=8000
+      - CHROMA_DB_PATH=/app/chroma_db
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      - GEMINI_FALLBACK_MODELS=${GEMINI_FALLBACK_MODELS:-gemini-3.5-flash,gemini-3.1-flash-lite,gemini-flash-latest}
+      - GEMINI_OCR_MODEL=${GEMINI_OCR_MODEL:-gemini-3.5-flash-lite}
+    volumes:
+      - chroma_data:/app/chroma_db
+      - hf_cache:/root/.cache/huggingface
+    networks:
+      - coursemate-network
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: coursemate-backend
+    restart: unless-stopped
+    ports:
+      - "5000:5000"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    env_file:
+      - path: .env
+        required: false
+      - path: ./backend/.env
+        required: false
+    environment:
+      - PORT=5000
+      - NODE_ENV=${NODE_ENV:-development}
+      - ALLOW_LOCAL_FALLBACK=true
+      - MONGODB_URI=${MONGODB_URI}
+      - MONGODB_LOCAL_URI=mongodb://host.docker.internal:27017/coursemate
+      - JWT_SECRET=${JWT_SECRET}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      - GEMINI_FALLBACK_MODELS=${GEMINI_FALLBACK_MODELS:-gemini-3.5-flash,gemini-3.1-flash-lite,gemini-flash-latest}
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
+      - PYTHON_RAG_URL=http://rag-service:8000
+    depends_on:
+      rag-service:
+        condition: service_healthy
+    volumes:
+      - backend_uploads:/app/uploads
+    networks:
+      - coursemate-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: coursemate-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - coursemate-network
+
+volumes:
+  chroma_data:
+  hf_cache:
+  backend_uploads:
+
+networks:
+  coursemate-network:
+    driver: bridge
